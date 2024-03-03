@@ -1,0 +1,125 @@
+#version 430
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+const uint kLength = 23;
+const uint kRadius = kLength/2;
+
+layout (r32f, binding = 0) uniform readonly  image2D rawImg;
+layout (r32f, binding = 1) uniform writeonly image2D blurredImg;
+layout (rgba32f, binding = 2) uniform readonly image2D position;
+
+layout (push_constant) uniform gaussianKernel {
+    float coeffs[kLength];
+} kernel;
+
+shared float[32 + 2*kRadius][32 + 2*kRadius] wgPatch;
+
+void bufferToShared(uvec2 idx, uvec2 lidx, uvec2 wgDim, ivec2 imgDim) {
+    // INSIDE WORKGROUP BOUNDS
+    wgPatch[lidx.y + kRadius][lidx.x + kRadius] = imageLoad(rawImg, ivec2(idx)).r;
+    // OUTSIDE LEFT WORKGROUP BOUNDS
+    if (lidx.x < kRadius) {
+        // OUTSIDE PURE LEFT WORKGROUP BOUNDS
+        if (idx.x - kRadius < 0) // OUTSIDE IMAGE BOUNDS
+            wgPatch[lidx.y + kRadius][lidx.x] = 0.f;
+        else
+            wgPatch[lidx.y + kRadius][lidx.x] = imageLoad(rawImg, ivec2(idx.x - kRadius, idx.y)).r;
+
+        // OUTSIDE BOTTOM-LEFT WORKGROUP BOUNDS
+        if (lidx.y >= wgDim.y - kRadius) {
+            if (idx.x - kRadius < 0 || idx.y + kRadius >= imgDim.y) // OUTSIDE IMAGE BOUNDS
+                wgPatch[lidx.y + 2*kRadius][lidx.x] = 0.f;
+            else
+                wgPatch[lidx.y + 2*kRadius][lidx.x] = imageLoad(rawImg, ivec2(idx.x - kRadius, idx.y + kRadius)).r;
+        }
+    }
+    // OUTSIDE TOP WORKGROUP BOUNDS
+    if (lidx.y < kRadius) {
+        // OUTSIDE TOP-LEFT WORKGROUP BOUNDS
+        if (idx.x - kRadius < 0 || idx.y - kRadius < 0)  // OUTSIDE IMAGE BOUNDS
+            wgPatch[lidx.y][lidx.x] = 0.f;
+        else
+            wgPatch[lidx.y][lidx.x] = imageLoad(rawImg, ivec2(idx.x - kRadius, idx.y - kRadius)).r;
+
+        // OUTSIDE PURE TOP WORKGROUP BOUNDS
+        if (idx.y - kRadius < 0)  // OUTSIDE IMAGE BOUNDS
+            wgPatch[lidx.y][lidx.x + kRadius] = 0.f;
+        else
+            wgPatch[lidx.y][lidx.x + kRadius] = imageLoad(rawImg, ivec2(idx.x, idx.y - kRadius)).r;
+
+        // OUTSIDE TOP-RIGHT WORKGROUP BOUNDS
+        if (lidx.x >= wgDim.x - kRadius) {
+            if (idx.x + kRadius >= imgDim.x || idx.y < kRadius) // OUTSIDE IMAGE BOUNDS
+                wgPatch[lidx.y][lidx.x + 2*kRadius] = 0.f;
+            else
+                wgPatch[lidx.y][lidx.x + 2*kRadius] = imageLoad(rawImg, ivec2(idx.x + kRadius, idx.y - kRadius)).r;
+        }
+    } 
+    // OUTSIDE RIGHT WORKGROUP BOUNDS
+    if (lidx.x + kRadius >= wgDim.x) {
+        // OUTSIDE PURE RIGHT WORKGROUP BOUNDS
+        if (idx.x + kRadius >= imgDim.x) // OUTSIDE IMAGE BOUNDS
+            wgPatch[lidx.y + kRadius][lidx.x + 2*kRadius] = 0.f;
+        else
+            wgPatch[lidx.y + kRadius][lidx.x + 2*kRadius] = imageLoad(rawImg, ivec2(idx.x+ kRadius, idx.y)).r;
+
+        // OUTSIDE BOTTOM-RIGHT WORKGROUP BOUNDS
+        if (lidx.y + kRadius >= wgDim.y) {
+            if (idx.x + kRadius >= imgDim.x || idx.y + kRadius >= imgDim.y) // OUTSIDE IMAGE BOUNDS
+                wgPatch[lidx.y + 2*kRadius][lidx.x + 2*kRadius] = 0.f;
+            else
+                wgPatch[lidx.y + 2*kRadius][lidx.x + 2*kRadius] = imageLoad(rawImg, ivec2(idx.x + kRadius, idx.y + kRadius)).r;
+        }
+    }
+    // OUTSIDE BOTTOM WORKGROUP BOUNDS
+    if (lidx.y + kRadius >= wgDim.y) { 
+        if (idx.y + kRadius >= imgDim.y) // OUTSIDE IMAGE BOUNDS
+            wgPatch[lidx.y + 2*kRadius][lidx.x + kRadius] = 0.f;
+        else
+            wgPatch[lidx.y + 2*kRadius][lidx.x + kRadius] = imageLoad(rawImg, ivec2(idx.x, idx.y + kRadius)).r;
+    }
+}
+
+void singlePass(uvec2 idx, uvec2 lidx, uint pos, uvec2 dir) {
+    float color = 0.f;
+    float coeffsSum  = 0.0f;
+    float depth = imageLoad(position, ivec2(idx)).z;
+    for (int i = 0; i < kLength; i++)
+    {
+        float neighborhoodDepth = imageLoad(position, ivec2(idx.x + dir.x*(i-kRadius), idx.y + dir.y*(i-kRadius))).z;
+        if (abs(neighborhoodDepth - depth) <= 0.1)
+        {
+            color += kernel.coeffs[i] * wgPatch[pos*dir.x + dir.y*(i+lidx.y)][pos*dir.y + dir.x*(i+lidx.x)];
+            coeffsSum += kernel.coeffs[i];
+        }
+    }
+    barrier();
+    wgPatch[pos*dir.x + dir.y*(lidx.y + kRadius)][pos*dir.y + dir.x*(lidx.x + kRadius)] = color / coeffsSum;
+}
+
+void main()  {
+    uvec2 idx = gl_GlobalInvocationID.xy;
+    uvec2 lidx = gl_LocalInvocationID.xy;
+    uvec2 wgDim = gl_WorkGroupSize.xy;
+    ivec2 imgDim = imageSize(rawImg);
+
+    if (idx.x < imgDim.x && idx.y < imgDim.y) {
+        bufferToShared(idx, lidx, wgDim, imgDim);
+        barrier();
+        // Horizontal pass
+        singlePass(idx, lidx, lidx.y + kRadius, uvec2(1, 0));
+
+        // Calculate top and bottom padding for vertical pass, no need to calculate left and right
+        if ((lidx.y < kRadius) && (idx.y >= kRadius))
+            singlePass(idx, lidx, lidx.y, uvec2(1, 0));
+        else if ((lidx.y >= wgDim.y - kRadius) && (idx.y + kRadius < imgDim.y))
+            singlePass(idx, lidx, lidx.y + 2*kRadius, uvec2(1, 0));
+
+        barrier();
+        //Vertical pass
+        singlePass(idx, lidx, lidx.x + kRadius, uvec2(0, 1));
+
+        imageStore(blurredImg, ivec2(idx), vec4(wgPatch[lidx.y + kRadius][lidx.x + kRadius], 0.f, 0.f, 0.f));
+    }
+}
