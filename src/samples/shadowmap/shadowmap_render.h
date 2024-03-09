@@ -85,7 +85,6 @@ private:
   UniformParams m_uniforms {};
   void* m_uboMappedMem = nullptr;
 
-  etna::GraphicsPipeline m_basicForwardPipeline {};
   etna::GraphicsPipeline m_shadowPipeline {};
   etna::GraphicsPipeline m_prepareGbufferPipeline {};
   etna::GraphicsPipeline m_resolveGbufferPipeline {};

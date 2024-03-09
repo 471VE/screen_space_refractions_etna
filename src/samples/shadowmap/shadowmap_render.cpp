@@ -191,15 +191,13 @@ void SimpleShadowmapRender::PreparePipelines()
 
 void SimpleShadowmapRender::loadShaders()
 {
-  etna::create_program("simple_material",
-    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple_shadow.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple.vert.spv"});
-  etna::create_program("simple_shadow", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple.vert.spv"});
+  etna::create_program("shadowmap_producer", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/render_scene.vert.spv"});
   etna::create_program("prepare_gbuffer",
-    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/prepare_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/simple.vert.spv"});
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/prepare_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/render_scene.vert.spv"});
   etna::create_program("resolve_gbuffer",
-    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/quad3_vert.vert.spv"});
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/fullscreen_quad.vert.spv"});
   etna::create_program("calculate_ssao",
-    { VK_GRAPHICS_BASIC_ROOT"/resources/shaders/ssao.frag.spv", VK_GRAPHICS_BASIC_ROOT "/resources/shaders/quad3_vert.vert.spv" });
+    { VK_GRAPHICS_BASIC_ROOT"/resources/shaders/ssao.frag.spv", VK_GRAPHICS_BASIC_ROOT "/resources/shaders/fullscreen_quad.vert.spv" });
   etna::create_program("gaussian_blur", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/gaussian_blur.comp.spv"});
 }
 
@@ -223,16 +221,7 @@ void SimpleShadowmapRender::SetupSimplePipeline()
   };
 
   auto& pipelineManager = etna::get_context().getPipelineManager();
-  m_basicForwardPipeline = pipelineManager.createGraphicsPipeline("simple_material",
-    {
-      .vertexShaderInput = sceneVertexInputDesc,
-      .fragmentShaderOutput =
-        {
-          .colorAttachmentFormats = {static_cast<vk::Format>(m_swapchain.GetFormat())},
-          .depthAttachmentFormat = vk::Format::eD32Sfloat
-        }
-    });
-  m_shadowPipeline = pipelineManager.createGraphicsPipeline("simple_shadow",
+  m_shadowPipeline = pipelineManager.createGraphicsPipeline("shadowmap_producer",
     {
       .vertexShaderInput = sceneVertexInputDesc,
       .fragmentShaderOutput =
@@ -358,7 +347,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
       m_ssaoPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
 
-    vkCmdDraw(a_cmdBuff, 4, 1, 0, 0);
+    vkCmdDraw(a_cmdBuff, 6, 1, 0, 0); // 6 vertices for 2 triangles in a quad
   }
 
   //// blur SSAO texture
@@ -407,7 +396,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
       m_resolveGbufferPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
 
-    vkCmdDraw(a_cmdBuff, 4, 1, 0, 0);
+    vkCmdDraw(a_cmdBuff, 6, 1, 0, 0); // 6 vertices for 2 triangles in a quad
   }
 
   if(m_input.drawFSQuad)

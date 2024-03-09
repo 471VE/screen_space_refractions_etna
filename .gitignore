@@ -2,6 +2,7 @@ bin
 build
 external
 .vs
+.vscode
 .cache
 shadowmap_renderer.exe
 shadowmap_renderer.pdb
