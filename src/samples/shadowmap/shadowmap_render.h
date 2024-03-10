@@ -54,6 +54,7 @@ private:
     etna::Image ssao;
     etna::Image blurredSsao;
   } gBuffer;
+  etna::Image environmentMap;
   etna::Sampler defaultSampler;
   etna::Buffer constants;
   etna::Buffer ssaoSamples;
@@ -71,6 +72,7 @@ private:
 
   std::vector<VkFence> m_frameFences;
   std::vector<VkCommandBuffer> m_cmdBuffersDrawMain;
+  VkCommandBuffer m_textureCmdBuffer; // a command buffer specifically to load textures
 
   struct
   {
@@ -147,6 +149,7 @@ private:
   void DrawSceneCmd(VkCommandBuffer a_cmdBuff, const float4x4& a_wvp, VkPipelineLayout a_pipelineLayout = VK_NULL_HANDLE);
 
   void loadShaders();
+  void loadEnvironmentMap();
 
   void SetupSimplePipeline();
   void RecreateSwapChain();

@@ -10,6 +10,7 @@
 #include <etna/Etna.hpp>
 #include <etna/RenderTargetStates.hpp>
 #include <vulkan/vulkan_core.h>
+#include <loader_utils/images.h>
 
 static float get_random_float()
 {
@@ -139,9 +140,24 @@ void SimpleShadowmapRender::AllocateResources()
   }
 }
 
+void SimpleShadowmapRender::loadEnvironmentMap()
+{
+  int width, height, channels;
+  uint8_t* bytes = loadImageLDR(VK_GRAPHICS_BASIC_ROOT"/resources/textures/shrek.jpg", width, height, channels);
+
+  environmentMap = etna::create_image_from_bytes(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
+    .name = "shrek",
+    .format = vk::Format::eR8G8B8A8Srgb,
+    .imageUsage = vk::ImageUsageFlagBits::eSampled
+  }, m_textureCmdBuffer, bytes);
+}
+
 void SimpleShadowmapRender::LoadScene(const char* path, bool transpose_inst_matrices)
 {
   m_pScnMgr->LoadSceneXML(path, transpose_inst_matrices);
+  loadEnvironmentMap();
 
   // TODO: Make a separate stage
   loadShaders();
@@ -387,6 +403,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       etna::Binding {3, gBuffer.normal.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding {4, gBuffer.albedo.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding {5, gBuffer.blurredSsao.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {6, environmentMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
     });
     VkDescriptorSet vkSet = set.getVkSet();
 

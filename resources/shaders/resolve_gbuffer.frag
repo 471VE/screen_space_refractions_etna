@@ -21,6 +21,7 @@ layout (binding = 2) uniform sampler2D positionMap;
 layout (binding = 3) uniform sampler2D normalMap;
 layout (binding = 4) uniform sampler2D albedoMap;
 layout (binding = 5) uniform sampler2D ssaoMap;
+layout (binding = 6) uniform sampler2D environmentMap;
 
 void main()
 {
@@ -35,10 +36,10 @@ void main()
   const vec4 lightColor1 = vec4(1.f, 1.f, 1.f, 1.f);
 
   const vec3 normal = (Params.viewInverse * texture(normalMap, vsOut.texCoord)).xyz;
-  vec4 albedo     = texture(albedoMap, vsOut.texCoord);
+  vec4 albedo = texture(albedoMap, vsOut.texCoord);
   if (albedo.xyz == vec3(0.f))
   {
-    out_fragColor = vec4(0.f);
+    out_fragColor = texture(environmentMap, vsOut.texCoord);
   }
   else
   {
