@@ -138,6 +138,18 @@ void SimpleShadowmapRender::AllocateResources()
   for (uint32_t i = 0; i < m_gaussian_kernel_length; i++) {
     m_gaussian_kernel[i] /= sum;
   }
+
+  gaussianKernel = m_context->createBuffer(etna::Buffer::CreateInfo
+  {
+    .size = sizeof(float) * m_gaussian_kernel_length,
+    .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+    .name = "gaussian_kernel"
+  });
+
+  void *gaussianKernelMappedMem = gaussianKernel.map();
+  memcpy(gaussianKernelMappedMem, m_gaussian_kernel.data(), sizeof(float) * m_gaussian_kernel_length);
+  gaussianKernel.unmap();
 }
 
 void SimpleShadowmapRender::loadEnvironmentMap()
@@ -186,6 +198,7 @@ void SimpleShadowmapRender::DeallocateResources()
   constants = etna::Buffer();
   ssaoSamples = etna::Buffer();
   ssaoNoise = etna::Buffer();
+  gaussianKernel = etna::Buffer();
 }
 
 
@@ -196,12 +209,6 @@ void SimpleShadowmapRender::DeallocateResources()
 
 void SimpleShadowmapRender::PreparePipelines()
 {
-  // create full screen quad for debug purposes
-  // 
-  m_pQuad = std::make_unique<QuadRenderer>(QuadRenderer::CreateInfo{ 
-      .format = static_cast<vk::Format>(m_swapchain.GetFormat()),
-      .rect = { 0, 0, 512, 512 }, 
-    });
   SetupSimplePipeline();
 }
 
@@ -278,10 +285,9 @@ void SimpleShadowmapRender::SetupSimplePipeline()
 
 /// COMMAND BUFFER FILLING
 
-void SimpleShadowmapRender::DrawSceneCmd(VkCommandBuffer a_cmdBuff, const float4x4& a_wvp, VkPipelineLayout a_pipelineLayout)
+void SimpleShadowmapRender::DrawSceneCmd(VkCommandBuffer a_cmdBuff, const float4x4& a_wvp, VkPipelineLayout a_pipelineLayout,
+  VkShaderStageFlags stageFlags)
 {
-  VkShaderStageFlags stageFlags = (VK_SHADER_STAGE_VERTEX_BIT);
-
   VkDeviceSize zero_offset = 0u;
   VkBuffer vertexBuf = m_pScnMgr->GetVertexBuffer();
   VkBuffer indexBuf  = m_pScnMgr->GetIndexBuffer();
@@ -339,7 +345,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
       m_prepareGbufferPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
 
-    DrawSceneCmd(a_cmdBuff, m_worldViewProj);
+    DrawSceneCmd(a_cmdBuff, m_worldViewProj, m_prepareGbufferPipeline.getVkPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
   }
 
   //// calculate SSAO
@@ -376,13 +382,10 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       etna::Binding {0, gBuffer.ssao.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
       etna::Binding {1, gBuffer.blurredSsao.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
       etna::Binding {2, gBuffer.position.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)},
+      etna::Binding {3, gaussianKernel.genBinding()},
     });
     VkDescriptorSet vkSet = set.getVkSet();
     etna::flush_barriers(a_cmdBuff);
-
-    VkShaderStageFlags stageFlags = (VK_SHADER_STAGE_COMPUTE_BIT);
-    vkCmdPushConstants(a_cmdBuff, m_gaussianBlurPipeline.getVkPipelineLayout(),
-      stageFlags, 0, sizeof(float) * m_gaussian_kernel_length, m_gaussian_kernel.data());
 
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_COMPUTE,
       m_gaussianBlurPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);

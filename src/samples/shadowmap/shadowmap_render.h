@@ -59,6 +59,7 @@ private:
   etna::Buffer constants;
   etna::Buffer ssaoSamples;
   etna::Buffer ssaoNoise;
+  etna::Buffer gaussianKernel;
 
   VkCommandPool    m_commandPool    = VK_NULL_HANDLE;
 
@@ -146,7 +147,8 @@ private:
 
   void BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, VkImage a_targetImage, VkImageView a_targetImageView);
 
-  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, const float4x4& a_wvp, VkPipelineLayout a_pipelineLayout = VK_NULL_HANDLE);
+  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, const float4x4& a_wvp, VkPipelineLayout a_pipelineLayout,
+    VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT);
 
   void loadShaders();
   void loadEnvironmentMap();

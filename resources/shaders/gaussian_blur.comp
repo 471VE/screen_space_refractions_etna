@@ -8,8 +8,7 @@ const uint kRadius = kLength/2;
 layout (r32f, binding = 0) uniform readonly  image2D rawImg;
 layout (r32f, binding = 1) uniform writeonly image2D blurredImg;
 layout (rgba32f, binding = 2) uniform readonly image2D position;
-
-layout (push_constant) uniform gaussianKernel {
+layout (binding = 3) buffer gaussianKernel {
     float coeffs[kLength];
 } kernel;
 
