@@ -23,6 +23,10 @@ void SimpleShadowmapRender::UpdateView()
   m_uniforms.view = mLookAt;
   m_uniforms.proj = mProjFix * mProj;
   m_uniforms.viewInverse = LiteMath::inverse4x4(mLookAt);
+
+  m_uniforms.camForward = m_cam.forward();
+  m_uniforms.camRight = m_cam.right();
+  m_uniforms.camUp = m_cam.up;
   
   m_worldViewProj = mWorldViewProj;
   
