@@ -11,6 +11,8 @@ layout (location = 0) in VS_OUT
   vec2 texCoord;
 } vsOut;
 
+layout(location = 1) in vec3 forwards;
+
 layout(binding = 0, set = 0) uniform AppData
 {
   UniformParams Params;
@@ -21,7 +23,8 @@ layout (binding = 2) uniform sampler2D positionMap;
 layout (binding = 3) uniform sampler2D normalMap;
 layout (binding = 4) uniform sampler2D albedoMap;
 layout (binding = 5) uniform sampler2D ssaoMap;
-layout (binding = 6) uniform sampler2D environmentMap;
+// layout (binding = 6) uniform sampler2D backgroundTexture;
+layout (binding = 7) uniform samplerCube environmentMap;
 
 void main()
 {
@@ -39,7 +42,8 @@ void main()
   vec4 albedo = texture(albedoMap, vsOut.texCoord);
   if (albedo.xyz == vec3(0.f))
   {
-    out_fragColor = texture(environmentMap, vsOut.texCoord);
+    // out_fragColor = texture(backgroundTexture, vsOut.texCoord);
+    out_fragColor = texture(environmentMap, forwards);
   }
   else
   {

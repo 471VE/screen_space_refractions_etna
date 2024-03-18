@@ -54,6 +54,7 @@ private:
     etna::Image ssao;
     etna::Image blurredSsao;
   } gBuffer;
+  etna::Image backgroundTexture;
   etna::Image environmentMap;
   etna::Sampler defaultSampler;
   etna::Buffer constants;
@@ -151,6 +152,7 @@ private:
     VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT);
 
   void loadShaders();
+  void loadBackgroundTexture();
   void loadEnvironmentMap();
 
   void SetupSimplePipeline();

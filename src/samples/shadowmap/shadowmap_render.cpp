@@ -1,5 +1,6 @@
 #include "shadowmap_render.h"
 
+#include <cstdlib>
 #include <geom/vk_mesh.h>
 #include <vk_pipeline.h>
 #include <vk_buffers.h>
@@ -152,23 +153,62 @@ void SimpleShadowmapRender::AllocateResources()
   gaussianKernel.unmap();
 }
 
+void SimpleShadowmapRender::loadBackgroundTexture()
+{
+  int width, height, channels;
+  uint8_t* pixels = loadImageLDR(VK_GRAPHICS_BASIC_ROOT"/resources/textures/shrek.jpg", width, height, channels);
+
+  backgroundTexture = etna::create_image_from_bytes(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
+    .name = "shrek",
+    .format = vk::Format::eR8G8B8A8Unorm,
+    .imageUsage = vk::ImageUsageFlagBits::eSampled
+  }, m_textureCmdBuffer, pixels);
+
+  freeImageMemLDR(pixels);
+}
+
 void SimpleShadowmapRender::loadEnvironmentMap()
 {
   int width, height, channels;
-  uint8_t* bytes = loadImageLDR(VK_GRAPHICS_BASIC_ROOT"/resources/textures/shrek.jpg", width, height, channels);
+  constexpr int FACES_NUM = 6;
+  uint8_t *pixels[FACES_NUM];
+  std::array<std::string, FACES_NUM> filenames = {
+    VK_GRAPHICS_BASIC_ROOT"/resources/textures/skybox/posx.jpg",
+    VK_GRAPHICS_BASIC_ROOT"/resources/textures/skybox/negx.jpg",
+    VK_GRAPHICS_BASIC_ROOT"/resources/textures/skybox/posy.jpg",
+    VK_GRAPHICS_BASIC_ROOT"/resources/textures/skybox/negy.jpg",
+    VK_GRAPHICS_BASIC_ROOT"/resources/textures/skybox/posz.jpg",
+    VK_GRAPHICS_BASIC_ROOT"/resources/textures/skybox/negz.jpg"
+  };
+  for (int i = 0; i < FACES_NUM; ++i)
+    pixels[i] = loadImageLDR(filenames[i].c_str(), width, height, channels);
+
+  int imageSize = width * height * 4;
+  void *bytes = malloc(imageSize * FACES_NUM);
+  for (int i = 0; i < FACES_NUM; ++i)
+    memcpy((uint8_t *)bytes + i * imageSize, (void *)pixels[i], imageSize);
 
   environmentMap = etna::create_image_from_bytes(etna::Image::CreateInfo
   {
     .extent = vk::Extent3D{static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
-    .name = "shrek",
-    .format = vk::Format::eR8G8B8A8Srgb,
-    .imageUsage = vk::ImageUsageFlagBits::eSampled
+    .name = "skybox",
+    .flags = vk::ImageCreateFlagBits() | vk::ImageCreateFlagBits::eCubeCompatible,
+    .format = vk::Format::eR8G8B8A8Unorm,
+    .imageUsage = vk::ImageUsageFlagBits::eSampled,
+    .layers = FACES_NUM,
   }, m_textureCmdBuffer, bytes);
+
+  for (int i = 0; i < FACES_NUM; ++i)
+    freeImageMemLDR(pixels[i]);
+  free(bytes);
 }
 
 void SimpleShadowmapRender::LoadScene(const char* path, bool transpose_inst_matrices)
 {
   m_pScnMgr->LoadSceneXML(path, transpose_inst_matrices);
+  // loadBackgroundTexture();
   loadEnvironmentMap();
 
   // TODO: Make a separate stage
@@ -218,7 +258,7 @@ void SimpleShadowmapRender::loadShaders()
   etna::create_program("prepare_gbuffer",
     {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/prepare_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/render_scene.vert.spv"});
   etna::create_program("resolve_gbuffer",
-    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/fullscreen_quad.vert.spv"});
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.vert.spv"});
   etna::create_program("calculate_ssao",
     { VK_GRAPHICS_BASIC_ROOT"/resources/shaders/ssao.frag.spv", VK_GRAPHICS_BASIC_ROOT "/resources/shaders/fullscreen_quad.vert.spv" });
   etna::create_program("gaussian_blur", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/gaussian_blur.comp.spv"});
@@ -406,7 +446,8 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
       etna::Binding {3, gBuffer.normal.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding {4, gBuffer.albedo.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding {5, gBuffer.blurredSsao.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-      etna::Binding {6, environmentMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      // etna::Binding {6, backgroundTexture.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal, {0, 1, 1, vk::ImageViewType::e2D})},
+      etna::Binding {7, environmentMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal, {0, 1, 6, vk::ImageViewType::eCube})},
     });
     VkDescriptorSet vkSet = set.getVkSet();
 
@@ -424,7 +465,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
 
   etna::set_state(a_cmdBuff, a_targetImage, vk::PipelineStageFlagBits2::eBottomOfPipe,
     vk::AccessFlags2(), vk::ImageLayout::ePresentSrcKHR,
-    vk::ImageAspectFlagBits::eColor);
+    vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 
   etna::finish_frame(a_cmdBuff);
 
