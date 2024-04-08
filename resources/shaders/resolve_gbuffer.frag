@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-layout (location = 0) out vec4 out_fragColor;
+layout (location = 0) out vec4 frameBeforeTransparency;
 
 layout (location = 0) in VS_OUT
 {
@@ -41,15 +41,12 @@ void main()
   const vec3 normal = (Params.viewInverse * texture(normalMap, vsOut.texCoord)).xyz;
   vec4 albedo = texture(albedoMap, vsOut.texCoord);
   if (albedo.xyz == vec3(0.f))
-  {
-    // out_fragColor = texture(backgroundTexture, vsOut.texCoord);
-    out_fragColor = texture(environmentMap, forwards);
-  }
+    frameBeforeTransparency = texture(environmentMap, forwards);
   else
   {
     float occlusion = Params.ssaoEnabled ? texture(ssaoMap, vsOut.texCoord).r : 1.f;
     vec3 lightDir = normalize(Params.lightPos - wPos);
     vec4 lightColor = max(dot(normal, lightDir), 0.0f) * lightColor1;
-    out_fragColor = (lightColor * shadow + vec4(0.4f) * occlusion) * albedo;
+    frameBeforeTransparency = (lightColor * shadow + vec4(0.4f) * occlusion) * albedo;
   }
 }

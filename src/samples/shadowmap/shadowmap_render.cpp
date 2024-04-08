@@ -1,17 +1,18 @@
-#include "shadowmap_render.h"
-
 #include <cstdlib>
-#include <geom/vk_mesh.h>
-#include <vk_pipeline.h>
-#include <vk_buffers.h>
 #include <iostream>
 #include <random>
 
-#include <etna/GlobalContext.hpp>
 #include <etna/Etna.hpp>
+#include <etna/GlobalContext.hpp>
 #include <etna/RenderTargetStates.hpp>
-#include <vulkan/vulkan_core.h>
+#include <geom/vk_mesh.h>
 #include <loader_utils/images.h>
+#include <vk_pipeline.h>
+#include <vk_buffers.h>
+#include <vulkan/vulkan_core.h>
+
+#include "object.h"
+#include "shadowmap_render.h"
 
 static float get_random_float()
 {
@@ -79,6 +80,22 @@ void SimpleShadowmapRender::AllocateResources()
     .name = "blurred_ssao_tex",
     .format = vk::Format::eR32Sfloat,
     .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage
+  });
+
+  frameBeforeTransparency = m_context->createImage(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{m_width, m_height, 1},
+    .name = "frame_before_transparency",
+    .format = vk::Format::eR32G32B32A32Sfloat,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled
+  });
+
+  frameTransparencyOnly = m_context->createImage(etna::Image::CreateInfo
+  {
+    .extent = vk::Extent3D{m_width, m_height, 1},
+    .name = "frame_before_transparency",
+    .format = vk::Format::eR32G32B32A32Sfloat,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled
   });
 
   defaultSampler = etna::Sampler(etna::Sampler::CreateInfo{.name = "default_sampler"});
@@ -210,6 +227,8 @@ void SimpleShadowmapRender::LoadScene(const char* path, bool transpose_inst_matr
   m_pScnMgr->LoadSceneXML(path, transpose_inst_matrices);
   // loadBackgroundTexture();
   loadEnvironmentMap();
+  makeAssets();
+  transparencyScene = std::make_unique<TransparencyScene>();
 
   // TODO: Make a separate stage
   loadShaders();
@@ -232,6 +251,8 @@ void SimpleShadowmapRender::DeallocateResources()
   gBuffer.albedo.reset();
   gBuffer.ssao.reset();
   gBuffer.blurredSsao.reset();
+  frameBeforeTransparency.reset();
+  frameTransparencyOnly.reset();
   m_swapchain.Cleanup();
   vkDestroySurfaceKHR(GetVkInstance(), m_surface, nullptr);  
 
@@ -257,11 +278,15 @@ void SimpleShadowmapRender::loadShaders()
   etna::create_program("shadowmap_producer", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/render_scene.vert.spv"});
   etna::create_program("prepare_gbuffer",
     {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/prepare_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/render_scene.vert.spv"});
-  etna::create_program("resolve_gbuffer",
-    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.vert.spv"});
   etna::create_program("calculate_ssao",
     { VK_GRAPHICS_BASIC_ROOT"/resources/shaders/ssao.frag.spv", VK_GRAPHICS_BASIC_ROOT "/resources/shaders/fullscreen_quad.vert.spv" });
   etna::create_program("gaussian_blur", {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/gaussian_blur.comp.spv"});
+  etna::create_program("resolve_gbuffer",
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_gbuffer.vert.spv"});
+  etna::create_program("screen_space_transparency",
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/transparency.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/transparency.vert.spv"});
+  etna::create_program("resolve_transparency",
+    {VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_transparency.frag.spv", VK_GRAPHICS_BASIC_ROOT"/resources/shaders/resolve_transparency.vert.spv"});
 }
 
 void SimpleShadowmapRender::SetupSimplePipeline()
@@ -271,6 +296,14 @@ void SimpleShadowmapRender::SetupSimplePipeline()
       .bindings = {etna::VertexShaderInputDescription::Binding
         {
           .byteStreamDescription = m_pScnMgr->GetVertexStreamDescription()
+        }}
+    };
+
+  etna::VertexShaderInputDescription transparencyVertexInputDesc
+    {
+      .bindings = {etna::VertexShaderInputDescription::Binding
+        {
+          .byteStreamDescription = transparencyMeshes->getTransparencyVertexAttributeDescriptions()
         }}
     };
 
@@ -309,7 +342,7 @@ void SimpleShadowmapRender::SetupSimplePipeline()
     {
       .fragmentShaderOutput =
         {
-          .colorAttachmentFormats = { static_cast<vk::Format>(m_swapchain.GetFormat()) },
+          .colorAttachmentFormats = { vk::Format::eR32G32B32A32Sfloat },
         }
     });
   m_ssaoPipeline = pipelineManager.createGraphicsPipeline("calculate_ssao",
@@ -320,6 +353,23 @@ void SimpleShadowmapRender::SetupSimplePipeline()
         }
     });
   m_gaussianBlurPipeline = pipelineManager.createComputePipeline("gaussian_blur", {});
+  m_screenSpaceTransparencyPipeline = pipelineManager.createGraphicsPipeline("screen_space_transparency",
+    {
+      .vertexShaderInput = transparencyVertexInputDesc,
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = { vk::Format::eR32G32B32A32Sfloat },
+          .depthAttachmentFormat = vk::Format::eD32Sfloat
+        }
+    });
+  m_resolveTransparencyPipeline = pipelineManager.createGraphicsPipeline("resolve_transparency",
+    {
+      .vertexShaderInput = transparencyVertexInputDesc,
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = { static_cast<vk::Format>(m_swapchain.GetFormat()) },
+        }
+    });
 }
 
 
@@ -436,7 +486,6 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
   //// resolve gbuffer
   //
   {
-
     auto resolveGbufferInfo = etna::get_shader_program("resolve_gbuffer");
     auto set = etna::create_descriptor_set(resolveGbufferInfo.getDescriptorLayoutId(0), a_cmdBuff,
     {
@@ -451,11 +500,59 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
     });
     VkDescriptorSet vkSet = set.getVkSet();
 
-    etna::RenderTargetState renderTargets(a_cmdBuff, {0, 0, m_width, m_height}, {{a_targetImage, a_targetImageView}}, {});
+    etna::RenderTargetState renderTargets(a_cmdBuff, {0, 0, m_width, m_height}, {frameBeforeTransparency}, {});
 
     vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_resolveGbufferPipeline.getVkPipeline());
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
       m_resolveGbufferPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+
+    vkCmdDraw(a_cmdBuff, 6, 1, 0, 0); // 6 vertices for 2 triangles in a quad
+  }
+
+  //// render transparency
+  //
+  {
+    auto screenSpaceTransparencyInfo = etna::get_shader_program("screen_space_transparency");
+    auto set = etna::create_descriptor_set(screenSpaceTransparencyInfo.getDescriptorLayoutId(0), a_cmdBuff,
+    {
+      etna::Binding {0, constants.genBinding()},
+      etna::Binding {1, frameBeforeTransparency.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {2, gBuffer.position.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {3, gBuffer.albedo.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {4, environmentMap.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal, {0, 1, 6, vk::ImageViewType::eCube})},
+    });
+    VkDescriptorSet vkSet = set.getVkSet();
+
+    etna::RenderTargetState renderTargets(a_cmdBuff, {0, 0, m_width, m_height}, {frameTransparencyOnly}, gBuffer.mainViewDepth);
+
+    vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_screenSpaceTransparencyPipeline.getVkPipeline());
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      m_screenSpaceTransparencyPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
+
+    prepareTransparency(a_cmdBuff);
+    uint32_t startInstance = 0;
+		for (std::pair<meshTypes, std::vector<glm::vec3>> pair : transparencyScene->positions)
+			renderTransparency(
+				a_cmdBuff, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
+			);
+  }
+
+  //// resolve transparency
+  //
+  {
+    auto resolveTransparencyInfo = etna::get_shader_program("resolve_transparency");
+    auto set = etna::create_descriptor_set(resolveTransparencyInfo.getDescriptorLayoutId(0), a_cmdBuff,
+    {
+      etna::Binding {0, frameBeforeTransparency.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding {1, frameTransparencyOnly.genBinding(defaultSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+    });
+    VkDescriptorSet vkSet = set.getVkSet();
+
+    etna::RenderTargetState renderTargets(a_cmdBuff, {0, 0, m_width, m_height}, {{a_targetImage, a_targetImageView}}, {});
+
+    vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_resolveTransparencyPipeline.getVkPipeline());
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      m_resolveTransparencyPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, VK_NULL_HANDLE);
 
     vkCmdDraw(a_cmdBuff, 6, 1, 0, 0); // 6 vertices for 2 triangles in a quad
   }
@@ -470,4 +567,55 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
   etna::finish_frame(a_cmdBuff);
 
   VK_CHECK_RESULT(vkEndCommandBuffer(a_cmdBuff));
+}
+
+void SimpleShadowmapRender::makeAssets()
+{
+	std::unordered_map<meshTypes, const char*> model_filenames = {
+		{meshTypes::CUBE, "resources/models/sphere_small.obj"},
+	};
+	std::unordered_map<meshTypes, glm::mat4> preTransforms = {
+		{meshTypes::CUBE, glm::mat4(1.f)}
+		// {meshTypes::GIRL, glm::rotate(
+		// 	glm::mat4(1.f), 
+		// 	glm::radians(180.f), 
+		// 	glm::vec3(0.f, 0.f, 1.f)
+		// )},
+	};
+	std::unordered_map<meshTypes, ObjectMesh> loaded_models;
+
+	std::vector<meshTypes> mesh_types = {
+		meshTypes::CUBE,
+	};
+	for (meshTypes type : mesh_types)
+	{
+		loaded_models[type] = ObjectMesh();
+		loaded_models[type].load(model_filenames[type], preTransforms[type]);
+	}
+
+  transparencyMeshes = std::make_unique<TransparencyMeshes>(m_context->getDevice(), m_context->getPhysicalDevice(),
+    m_context->getQueueFamilyIdx(), m_context->getQueueFamilyIdx());
+
+  for (std::pair<meshTypes, ObjectMesh> pair : loaded_models)
+		transparencyMeshes->consume(pair.first, pair.second.vertices, pair.second.indices);
+
+	transparencyMeshes->finalize();
+}
+
+void SimpleShadowmapRender::prepareTransparency(vk::CommandBuffer commandBuffer)
+{
+	VkDeviceSize zero_offset = 0u;
+  VkBuffer vertexBuf = transparencyMeshes->GetVertexBuffer();
+  VkBuffer indexBuf  = transparencyMeshes->GetIndexBuffer();
+  
+  vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuf, &zero_offset);
+	commandBuffer.bindIndexBuffer(indexBuf, 0, vk::IndexType::eUint32);
+}
+
+void SimpleShadowmapRender::renderTransparency(vk::CommandBuffer commandBuffer, meshTypes objectType, uint32_t& startInstance, uint32_t instanceCount)
+{
+	int indexCount = transparencyMeshes->indexCounts.find(objectType)->second;
+	int firstIndex = transparencyMeshes->firstIndices.find(objectType)->second;
+	commandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, 0, startInstance);
+	startInstance += instanceCount;
 }

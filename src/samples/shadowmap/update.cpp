@@ -27,6 +27,7 @@ void SimpleShadowmapRender::UpdateView()
   m_uniforms.camForward = m_cam.forward();
   m_uniforms.camRight = m_cam.right();
   m_uniforms.camUp = m_cam.up;
+  m_uniforms.camPosition = m_cam.pos;
   
   m_worldViewProj = mWorldViewProj;
   

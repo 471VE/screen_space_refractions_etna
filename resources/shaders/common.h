@@ -41,6 +41,7 @@ using shader_bool  = LiteMath::uint;
 
 #endif
 
+#define IOR 1.45f
 
 struct UniformParams
 {
@@ -56,6 +57,7 @@ struct UniformParams
   shader_uint  ssaoNoiseSize;
   shader_vec3  camRight;
   shader_uint  ssaoKernelSize;
+  shader_vec3  camPosition;
   shader_float ssaoRadius;
 };
 

@@ -7,6 +7,8 @@
 #include "../../../resources/shaders/common.h"
 #include "etna/GraphicsPipeline.hpp"
 #include <geom/vk_mesh.h>
+#include "transparency_scene.h"
+#include "transparency_meshes.h"
 #include <vk_descriptor_sets.h>
 #include <vk_fbuf_attachment.h>
 #include <vk_images.h>
@@ -54,6 +56,8 @@ private:
     etna::Image ssao;
     etna::Image blurredSsao;
   } gBuffer;
+  etna::Image frameBeforeTransparency;
+  etna::Image frameTransparencyOnly;
   etna::Image backgroundTexture;
   etna::Image environmentMap;
   etna::Sampler defaultSampler;
@@ -91,10 +95,12 @@ private:
 
   etna::GraphicsPipeline m_shadowPipeline {};
   etna::GraphicsPipeline m_prepareGbufferPipeline {};
-  etna::GraphicsPipeline m_resolveGbufferPipeline {};
   etna::GraphicsPipeline m_ssaoPipeline {};
-  etna::ComputePipeline m_gaussianBlurPipeline {};
-  
+  etna::ComputePipeline  m_gaussianBlurPipeline {};
+  etna::GraphicsPipeline m_resolveGbufferPipeline {};
+  etna::GraphicsPipeline m_screenSpaceTransparencyPipeline {};
+  etna::GraphicsPipeline m_resolveTransparencyPipeline {};
+
   VkSurfaceKHR m_surface = VK_NULL_HANDLE;
   VulkanSwapChain m_swapchain;
 
@@ -113,6 +119,9 @@ private:
 
   std::shared_ptr<SceneManager> m_pScnMgr;
   std::shared_ptr<IRenderGUI> m_pGUIRender;
+
+  std::unique_ptr<TransparencyMeshes> transparencyMeshes;
+  std::unique_ptr<TransparencyScene> transparencyScene;
   
   std::unique_ptr<QuadRenderer> m_pQuad;
 
@@ -151,6 +160,10 @@ private:
   void DrawSceneCmd(VkCommandBuffer a_cmdBuff, const float4x4& a_wvp, VkPipelineLayout a_pipelineLayout,
     VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT);
 
+  void prepareTransparency(vk::CommandBuffer commandBuffer);
+  void renderTransparency(vk::CommandBuffer commandBuffer, meshTypes objectType, uint32_t& startInstance, uint32_t instanceCount);
+
+  void makeAssets();
   void loadShaders();
   void loadBackgroundTexture();
   void loadEnvironmentMap();

@@ -17,6 +17,10 @@ set(RENDER_SOURCE
         draw.cpp
         present.cpp
         gui.cpp
+        transparency_scene.cpp
+        transparency_meshes.cpp
+        object.cpp
+        preprocessing_common.cpp
 )
 
 add_executable(shadowmap_renderer main.cpp ../../utils/glfw_window.cpp ${VK_UTILS_SRC} ${SCENE_LOADER_SRC} ${RENDER_SOURCE} ${IMGUI_SRC})
