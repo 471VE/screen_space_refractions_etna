@@ -26,13 +26,16 @@ layout(location = 11) in vec3 sphCoeffsZ1;
 layout(location = 12) in vec3 sphCoeffsZ2;
 layout(location = 13) in vec3 sphCoeffsZ3;
 
-layout(location = 0) out vec3 fragNormal;
-layout(location = 1) out float width;
-layout(location = 2) out vec3 refractedVector;
-layout(location = 3) out vec4 outVertexScreenPos;
-layout(location = 4) out vec3 rayDirection;
-layout(location = 5) out vec4 outVertexPos;
-layout(location = 6) out vec4 inVertexPos;
+layout (location = 0) out VS_OUT
+{ 
+  vec3 fragNormal;
+  float width;
+  vec3 refractedVector;
+  vec4 outVertexScreenPos;
+  vec3 rayDirection;
+  vec4 outVertexPos;
+  vec4 inVertexPos;
+} vOut;
 
 #define UP vec3(0.f, 1.f, 0.f)
 
@@ -92,18 +95,18 @@ void main()
 {
   vec4 currentVertexPos = /*ObjectData.model[gl_InstanceIndex] * */ MOVE_TRANSFORM * vec4(vertexPosition, 1.f);
 	gl_Position = Params.proj * Params.view * currentVertexPos;
-  inVertexPos = gl_Position;
-	fragNormal = normalize((/*ObjectData.model[gl_InstanceIndex] * */ MOVE_TRANSFORM * vec4(vertexNormal, 0.f)).xyz);
+  vOut.inVertexPos = gl_Position;
+	vOut.fragNormal = normalize((/*ObjectData.model[gl_InstanceIndex] * */ MOVE_TRANSFORM * vec4(vertexNormal, 0.f)).xyz);
 	vec3 rayDirection = normalize(currentVertexPos.xyz - Params.camPosition.xyz);
 
-	vec3 inRayDirection = refract_safe(rayDirection, fragNormal, 1.f / IOR);
-  width = reconstruct_from_sh(inRayDirection, -fragNormal, sphCoeffsWidth1, sphCoeffsWidth2, sphCoeffsWidth3);
+	vec3 inRayDirection = refract_safe(rayDirection, vOut.fragNormal, 1.f / IOR);
+  vOut.width = reconstruct_from_sh(inRayDirection, -vOut.fragNormal, sphCoeffsWidth1, sphCoeffsWidth2, sphCoeffsWidth3);
   
   vec4 outVertexPos = currentVertexPos;
-  outVertexPos.xyz += inRayDirection * width;
+  outVertexPos.xyz += inRayDirection * vOut.width;
   vec4 outVertexScreenPos = Params.proj * Params.view * outVertexPos * 0.5f + 0.5f;
 
-  refractedVector.x = reconstruct_from_sh(inRayDirection, -fragNormal, sphCoeffsX1, sphCoeffsX2, sphCoeffsX3);
-  refractedVector.y = reconstruct_from_sh(inRayDirection, -fragNormal, sphCoeffsY1, sphCoeffsY2, sphCoeffsY3);
-  refractedVector.z = reconstruct_from_sh(inRayDirection, -fragNormal, sphCoeffsZ1, sphCoeffsZ2, sphCoeffsZ3);
+  vOut.refractedVector.x = reconstruct_from_sh(inRayDirection, -vOut.fragNormal, sphCoeffsX1, sphCoeffsX2, sphCoeffsX3);
+  vOut.refractedVector.y = reconstruct_from_sh(inRayDirection, -vOut.fragNormal, sphCoeffsY1, sphCoeffsY2, sphCoeffsY3);
+  vOut.refractedVector.z = reconstruct_from_sh(inRayDirection, -vOut.fragNormal, sphCoeffsZ1, sphCoeffsZ2, sphCoeffsZ3);
 }

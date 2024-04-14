@@ -8,7 +8,7 @@
 #define IOR 1.45f // index of refraction
 #define SINGLE_VERTEX_FLOAT_NUM 42
 #define VERTEX_POSITION_START 0
-#define VERTEX_NORMAL_START
+#define VERTEX_NORMAL_START 3
 
 struct DataToEncode {
 	float width, x, y, z;
