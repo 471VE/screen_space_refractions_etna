@@ -1,38 +1,8 @@
 #include "preprocessing_common.h"
+#include "spherical_harmonics.h"
 
 #include <algorithm>
 #include <execution>
-
-#include <glm/ext.hpp>
-
-// Spherical harmonics without constant terms
-static double Y00 (glm::dvec3 dir) { return 1.; }
-
-static double Y1m1(glm::dvec3 dir) { return dir.y; }
-static double Y10 (glm::dvec3 dir) { return dir.z; }
-static double Y11 (glm::dvec3 dir) { return dir.x; }
-
-static double Y2m2(glm::dvec3 dir) { return dir.x * dir.y; }
-static double Y2m1(glm::dvec3 dir) { return dir.y * dir.z; }
-static double Y20 (glm::dvec3 dir) { return 3. * dir.z * dir.z - 1.; }
-static double Y21 (glm::dvec3 dir) { return dir.x * dir.z; }
-static double Y22 (glm::dvec3 dir) { return dir.x * dir.x - dir.y * dir.y; }
-
-static const std::vector<std::function<double(glm::dvec3)>> SPHERICAL_HARMONICS = {
-  Y00, Y1m1, Y10, Y11, Y2m2, Y2m1, Y20, Y21, Y22 
-};
-
-static const std::vector<float> SH_CONSTANTS_SQUARED = {
-  1.f / (4.f * glm::pi<float>()),
-  3.f / (4.f * glm::pi<float>()),
-  3.f / (4.f * glm::pi<float>()),
-  3.f / (4.f * glm::pi<float>()),
-  15.f / (4.f * glm::pi<float>()),
-  15.f / (4.f * glm::pi<float>()),
-  5.f / (16.f * glm::pi<float>()),
-  15.f / (4.f * glm::pi<float>()),
-  15.f / (16.f * glm::pi<float>())
-};
 
 static double van_der_corput_sequence(uint32_t bits)
 {

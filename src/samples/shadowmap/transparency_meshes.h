@@ -3,7 +3,6 @@
 #include <etna/Buffer.hpp>
 #include <vk_utils.h>
 
-#include "preprocessing_common.h"
 #include "transparency_scene.h"
 
 class TransparencyMeshes {

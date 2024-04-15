@@ -1,6 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 #include "common.h"
+#include "../../src/samples/shadowmap/spherical_harmonics.h"
 
 layout(binding = 0, set = 0) uniform AppData
 {
@@ -38,21 +39,6 @@ layout (location = 0) out VS_OUT
 } vOut;
 
 #define UP vec3(0.f, 1.f, 0.f)
-
-// Implementation of spherical harmonics.
-// Note that constant coefficients are already accounted for in expansion terms.
-// A VERY IMPORTANT NOTE: notice how z-axis is UP direction.
-float Y00 (vec3 dir) { return 1.f; }
-
-float Y1m1(vec3 dir) { return dir.y; }
-float Y10 (vec3 dir) { return dir.z; }
-float Y11 (vec3 dir) { return dir.x; }
-
-float Y2m2(vec3 dir) { return dir.x * dir.y; }
-float Y2m1(vec3 dir) { return dir.y * dir.z; }
-float Y20 (vec3 dir) { return 3.f * dir.z * dir.z - 1.f; }
-float Y21 (vec3 dir) { return dir.x * dir.z; }
-float Y22 (vec3 dir) { return dir.x * dir.x - dir.y * dir.y; }
 
 float reconstruct_from_sh(vec3 rd, vec3 n, vec3 sphCoeffs1, vec3 sphCoeffs2, vec3 sphCoeffs3)
 {
