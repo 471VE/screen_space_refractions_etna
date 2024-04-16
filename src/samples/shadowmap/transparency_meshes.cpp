@@ -143,9 +143,8 @@ void TransparencyMeshes::consume(meshTypes type, std::vector<float>& vertexData,
 		};
 		std::vector<float> sphCoeffs = calculate_sh_terms(hammersleySequence, getDataToEncode);
 
-		static constexpr int SPHERICAL_HARMONICS_COEEFS_NUM = 9;
-		for (int i = 0; i < SPHERICAL_HARMONICS_COEEFS_NUM * 4; i++)
-			vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + 6 + i] = sphCoeffs[i];
+		for (int i = 0; i < SH_COEEFS_NUM * SH_ENCODED_VALUES; i++)
+			vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + SH_COEFFS_START + i] = sphCoeffs[i];
 
 		if (vertexNo % 100 == 0)
 			std::cout << "Vertex: " << vertexNo << "/" << vertexCount << '\n';
@@ -201,16 +200,27 @@ TransparencyMeshes::~TransparencyMeshes()
 
 etna::VertexByteStreamFormatDescription TransparencyMeshes::getTransparencyVertexAttributeDescriptions()
 {
+	std::vector<vk::Format> shFormats = {
+		vk::Format::eR32G32B32Sfloat,
+		vk::Format::eR32G32B32Sfloat,
+		vk::Format::eR32G32B32Sfloat,
+		vk::Format::eR32G32B32A32Sfloat,
+		vk::Format::eR32G32B32A32Sfloat,
+		vk::Format::eR32G32B32A32Sfloat,
+		vk::Format::eR32G32B32A32Sfloat,
+	};
+	std::vector<uint32_t> shFutureOffsets = { 3, 3, 3, 4, 4, 4, 4, };
+
   etna::VertexByteStreamFormatDescription result;
   result.stride = SINGLE_VERTEX_FLOAT_NUM * sizeof(float);
-  result.attributes.reserve(14);
+  result.attributes.reserve(30);
 
 	// Position
 	result.attributes.push_back(
 		etna::VertexByteStreamFormatDescription::Attribute
 		{
 			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 0
+			.offset = VERTEX_POSITION_START * sizeof(float)
 		});
 
 	// Normal
@@ -218,98 +228,60 @@ etna::VertexByteStreamFormatDescription TransparencyMeshes::getTransparencyVerte
 		etna::VertexByteStreamFormatDescription::Attribute
 		{
 			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 3 * sizeof(float)
+			.offset = VERTEX_NORMAL_START * sizeof(float)
 		});
 
 	// Spherical harmonics expansion coefficients
 
+	uint32_t shOffset = SH_COEFFS_START;
+
 	// Width
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 6 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 9 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 12 * sizeof(float)
-		});
+	for (int i = 0; i < shFormats.size(); i++)
+	{
+		result.attributes.push_back(
+			etna::VertexByteStreamFormatDescription::Attribute
+			{
+				.format = shFormats[i],
+				.offset = shOffset * (uint32_t)(sizeof(float))
+			});
+		shOffset += shFutureOffsets[i];
+	}
 
 	// X-coordinate of a refracted vector
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 15 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 18 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 21 * sizeof(float)
-		});
+	for (int i = 0; i < shFormats.size(); i++)
+	{
+		result.attributes.push_back(
+			etna::VertexByteStreamFormatDescription::Attribute
+			{
+				.format = shFormats[i],
+				.offset = shOffset * (uint32_t)(sizeof(float))
+			});
+		shOffset += shFutureOffsets[i];
+	}
 
 	// Y-coordinate of a refracted vector
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 24 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 27 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 30 * sizeof(float)
-		});
+	for (int i = 0; i < shFormats.size(); i++)
+	{
+		result.attributes.push_back(
+			etna::VertexByteStreamFormatDescription::Attribute
+			{
+				.format = shFormats[i],
+				.offset = shOffset * (uint32_t)(sizeof(float))
+			});
+		shOffset += shFutureOffsets[i];
+	}
 
 	// Z-coordinate of a refracted vector
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 33 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 36 * sizeof(float)
-		});
-
-	result.attributes.push_back(
-		etna::VertexByteStreamFormatDescription::Attribute
-		{
-			.format = vk::Format::eR32G32B32Sfloat,
-			.offset = 39 * sizeof(float)
-		});
+	for (int i = 0; i < shFormats.size(); i++)
+	{
+		result.attributes.push_back(
+			etna::VertexByteStreamFormatDescription::Attribute
+			{
+				.format = shFormats[i],
+				.offset = shOffset * (uint32_t)(sizeof(float))
+			});
+		shOffset += shFutureOffsets[i];
+	}
 
   return result;
 }

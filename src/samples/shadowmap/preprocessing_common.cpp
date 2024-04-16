@@ -16,6 +16,10 @@ static double van_der_corput_sequence(uint32_t bits)
   return double(bits) * 2.3283064365386963e-10;
 }
 
+static const double INTEGRATION_CONE_ANGLE = glm::pi<double>() / 12.f;
+static const double COS_THRESHOLD = std::cos(glm::pi<double>() / 2.f - INTEGRATION_CONE_ANGLE);
+static const double AREA_OF_INTEGRATION = 2. * glm::pi<double>() * COS_THRESHOLD;
+
 static glm::vec2 get_hammersley_point(uint32_t i, uint32_t N)
 {
   return glm::vec2(double(i) / double(N), van_der_corput_sequence(i));
@@ -24,7 +28,7 @@ static glm::vec2 get_hammersley_point(uint32_t i, uint32_t N)
 static glm::dvec3 sample_hemisphere_uniform(glm::vec2 H)
 {
   double phi = H.y * 2. * glm::pi<double>();
-  double cosTheta = 1. - H.x;
+  double cosTheta = 1. - H.x * COS_THRESHOLD;
   double sinTheta = sqrt(1. - cosTheta * cosTheta);
   return glm::dvec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
 }
@@ -41,7 +45,7 @@ std::vector<glm::dvec3> construct_hemisphere_hammersley_sequence(uint32_t numPoi
 std::vector<float> calculate_sh_terms(
   std::vector<glm::dvec3> hammersleySequence, std::function<DataToEncode(glm::dvec3)> getDataToEncode
 ) {
-  std::vector<double> shTermsSums(SPHERICAL_HARMONICS.size() * 4, 0.);
+  std::vector<double> shTermsSums(SPHERICAL_HARMONICS.size() * SH_ENCODED_VALUES, 0.);
 
   std::for_each(
     std::execution::par,
@@ -63,7 +67,7 @@ std::vector<float> calculate_sh_terms(
   shTerms.reserve(shTermsSums.size());
   for (int i = 0; i < shTermsSums.size(); i++)
     shTerms.push_back(
-      float(shTermsSums[i] * 2. * glm::pi<double>() / double(hammersleySequence.size()))
+      float(shTermsSums[i] * AREA_OF_INTEGRATION / double(hammersleySequence.size()))
       * SH_CONSTANTS_SQUARED[i % SPHERICAL_HARMONICS.size()]
     );
 

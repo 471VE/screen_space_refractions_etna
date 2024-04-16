@@ -1,4 +1,5 @@
 #include "object.h"
+#include "preprocessing_common.h"
 
 #include <fstream>
 
@@ -136,7 +137,6 @@ void ObjectMesh::readCorner(const std::string& vertex_description)
 	vertices.push_back(normal[1]);
 	vertices.push_back(normal[2]);
 
-	static constexpr int SPHERICAL_HARMONICS_COEEFS_NUM = 9;
-	for (int i = 0; i < SPHERICAL_HARMONICS_COEEFS_NUM * 4; i++)
+	for (int i = 0; i < SH_COEEFS_NUM * SH_ENCODED_VALUES; i++)
 		vertices.push_back(0);
 }

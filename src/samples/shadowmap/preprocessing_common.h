@@ -6,9 +6,12 @@
 #include <glm/glm.hpp>
 
 #define IOR 1.45f // index of refraction
-#define SINGLE_VERTEX_FLOAT_NUM 42
 #define VERTEX_POSITION_START 0
 #define VERTEX_NORMAL_START 3
+#define SH_COEFFS_START 6
+#define SH_COEEFS_NUM 25
+#define SH_ENCODED_VALUES 4
+#define SINGLE_VERTEX_FLOAT_NUM (SH_COEFFS_START + SH_COEEFS_NUM * SH_ENCODED_VALUES)
 
 struct DataToEncode {
 	float width, x, y, z;
