@@ -13,6 +13,7 @@ void SimpleShadowmapRender::SetupGUIElements()
 
     ImGui::SliderFloat3("Light source position", m_uniforms.lightPos.M, -10.f, 10.f);
     ImGui::Checkbox("SSAO", (bool*)&m_uniforms.ssaoEnabled);
+    ImGui::SliderFloat("Blending width", (float*)&m_uniforms.screenSpaceBlendingWidth, 0.f, 0.5f);
 
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 

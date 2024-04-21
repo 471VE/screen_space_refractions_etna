@@ -6,9 +6,9 @@
 SimpleShadowmapRender::SimpleShadowmapRender(uint32_t a_width, uint32_t a_height) : m_width(a_width), m_height(a_height)
 {
   m_uniforms.ssaoEnabled = true;
-  m_uniforms.ssaoRadius = 0.25f;
   m_uniforms.ssaoKernelSize = 64;
   m_uniforms.ssaoNoiseSize = 4;
+  m_uniforms.screenSpaceBlendingWidth = 0.15f;
 }
 
 void SimpleShadowmapRender::InitVulkan(const char** a_instanceExtensions, uint32_t a_instanceExtensionsCount, uint32_t)

@@ -58,7 +58,7 @@ struct UniformParams
   shader_vec3  camRight;
   shader_uint  ssaoKernelSize;
   shader_vec3  camPosition;
-  shader_float ssaoRadius;
+  shader_float screenSpaceBlendingWidth;
 };
 
 #endif // VK_GRAPHICS_BASIC_COMMON_H
