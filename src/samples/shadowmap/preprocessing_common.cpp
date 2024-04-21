@@ -1,9 +1,6 @@
 #include "preprocessing_common.h"
 #include "spherical_harmonics.h"
 
-#include <algorithm>
-#include <execution>
-
 static double van_der_corput_sequence(uint32_t bits)
 {
   // Reversing bits:
@@ -47,21 +44,17 @@ std::vector<float> calculate_sh_terms(
 ) {
   std::vector<double> shTermsSums(SPHERICAL_HARMONICS.size() * SH_ENCODED_VALUES, 0.);
 
-  std::for_each(
-    std::execution::par,
-    hammersleySequence.begin(),
-    hammersleySequence.end(),
-    [&getDataToEncode, &shTermsSums](auto&& direction)
+  for (const auto &direction : hammersleySequence)
+  {
+    DataToEncode data = getDataToEncode(direction);
+    for (int i = 0; i < SPHERICAL_HARMONICS.size(); i++)
     {
-      DataToEncode data = getDataToEncode(direction);
-      for (int i = 0; i < SPHERICAL_HARMONICS.size(); i++)
-      {
-        shTermsSums[i + 0 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.width;
-        shTermsSums[i + 1 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.x;
-        shTermsSums[i + 2 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.y;
-        shTermsSums[i + 3 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.z;
-      }
-    });
+      shTermsSums[i + 0 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.width;
+      shTermsSums[i + 1 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.x;
+      shTermsSums[i + 2 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.y;
+      shTermsSums[i + 3 * SPHERICAL_HARMONICS.size()] += SPHERICAL_HARMONICS[i](direction) * data.z;
+    }
+  }
 
   std::vector<float> shTerms;
   shTerms.reserve(shTermsSums.size());

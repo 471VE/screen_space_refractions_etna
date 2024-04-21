@@ -572,7 +572,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
 void SimpleShadowmapRender::makeAssets()
 {
 	std::unordered_map<meshTypes, const char*> model_filenames = {
-		{meshTypes::CUBE, "resources/models/wall.obj"},
+		{meshTypes::CUBE, "resources/models/human_skull.obj"},
 	};
 	std::unordered_map<meshTypes, glm::mat4> preTransforms = {
 		{meshTypes::CUBE, glm::mat4(1.f)}
