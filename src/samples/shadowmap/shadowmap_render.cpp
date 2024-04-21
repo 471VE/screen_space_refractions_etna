@@ -571,8 +571,10 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
 
 void SimpleShadowmapRender::makeAssets()
 {
-	std::unordered_map<meshTypes, const char*> model_filenames = {
-		{meshTypes::CUBE, "resources/models/human_skull.obj"},
+  std::string modelsPath = "resources/models/";
+  std::string modelName = read_model_name(modelsPath + "model_to_load.txt");
+	std::unordered_map<meshTypes, std::string> model_filenames = {
+		{meshTypes::CUBE, modelsPath + modelName},
 	};
 	std::unordered_map<meshTypes, glm::mat4> preTransforms = {
 		{meshTypes::CUBE, glm::mat4(1.f)}
@@ -590,7 +592,7 @@ void SimpleShadowmapRender::makeAssets()
 	for (meshTypes type : mesh_types)
 	{
 		loaded_models[type] = ObjectMesh();
-		loaded_models[type].load(model_filenames[type], preTransforms[type]);
+		loaded_models[type].load(model_filenames[type].c_str(), preTransforms[type]);
 	}
 
   transparencyMeshes = std::make_unique<TransparencyMeshes>(m_context->getDevice(), m_context->getPhysicalDevice(),
@@ -619,3 +621,4 @@ void SimpleShadowmapRender::renderTransparency(vk::CommandBuffer commandBuffer, 
 	commandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, 0, startInstance);
 	startInstance += instanceCount;
 }
+

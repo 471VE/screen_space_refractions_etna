@@ -20,3 +20,5 @@ public:
 	void readFaceData(const std::vector<std::string>& words);
 	void readCorner(const std::string& vertex_description);
 };
+
+std::string read_model_name(std::string modelNamePath);

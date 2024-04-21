@@ -140,3 +140,15 @@ void ObjectMesh::readCorner(const std::string& vertex_description)
 	for (int i = 0; i < SH_COEEFS_NUM * SH_ENCODED_VALUES; i++)
 		vertices.push_back(0);
 }
+
+std::string read_model_name(std::string modelNamePath)
+{
+	std::ifstream file;
+	std::string modelName;
+
+	file.open(modelNamePath);
+	std::getline(file, modelName);
+	file.close();
+
+	return modelName;
+}
