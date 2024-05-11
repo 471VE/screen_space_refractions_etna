@@ -592,14 +592,14 @@ void SimpleShadowmapRender::makeAssets()
 	for (meshTypes type : mesh_types)
 	{
 		loaded_models[type] = ObjectMesh();
-		loaded_models[type].load(model_filenames[type].c_str(), preTransforms[type]);
+		loaded_models[type].load(model_filenames[type] + ".obj", preTransforms[type]);
 	}
 
   transparencyMeshes = std::make_unique<TransparencyMeshes>(m_context->getDevice(), m_context->getPhysicalDevice(),
     m_context->getQueueFamilyIdx(), m_context->getQueueFamilyIdx());
 
   for (std::pair<meshTypes, ObjectMesh> pair : loaded_models)
-		transparencyMeshes->consume(pair.first, pair.second.vertices, pair.second.indices);
+		transparencyMeshes->consume(pair.first, pair.second.vertices, pair.second.indices, model_filenames[pair.first] + ".sph");
 
 	transparencyMeshes->finalize();
 }

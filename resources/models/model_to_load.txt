@@ -1,1 +1,1 @@
-sphere.obj
+sphere_small

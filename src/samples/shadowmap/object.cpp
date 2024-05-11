@@ -3,7 +3,7 @@
 
 #include <fstream>
 
-static std::vector<std::string> split(std::string line, std::string delimiter)
+std::vector<std::string> split_line(std::string line, std::string delimiter)
 {
 	std::vector<std::string> split_line;
 
@@ -21,7 +21,7 @@ static std::vector<std::string> split(std::string line, std::string delimiter)
 	return split_line;
 }
 
-void ObjectMesh::load(const char* objFilepath, glm::mat4 preTransform)
+void ObjectMesh::load(const std::string &objFilepath, glm::mat4 preTransform)
 {
 	this->preTransform = preTransform;
 
@@ -40,7 +40,7 @@ void ObjectMesh::load(const char* objFilepath, glm::mat4 preTransform)
 		if (line.empty())
 			continue;
 
-		words = split(line, " ");
+		words = split_line(line, " ");
 
 		if (!words[0].compare("v"))
 			vertex_count += 1;
@@ -69,7 +69,7 @@ void ObjectMesh::load(const char* objFilepath, glm::mat4 preTransform)
 		if (line.empty())
 			continue;
 			
-		words = split(line, " ");
+		words = split_line(line, " ");
 
 		if (!words[0].compare("v"))
 			readVertexData(words);
@@ -123,7 +123,7 @@ void ObjectMesh::readCorner(const std::string& vertex_description)
 	indices.push_back(index);
 
 
-	std::vector<std::string> v_vt_vn = split(vertex_description, "/");
+	std::vector<std::string> v_vt_vn = split_line(vertex_description, "/");
 
 	// Position
 	glm::vec3 pos = v[std::stol(v_vt_vn[0]) - 1];

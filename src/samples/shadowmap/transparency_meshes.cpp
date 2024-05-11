@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <execution>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <numeric>
 #include <unordered_map>
@@ -37,7 +39,7 @@ static bool ray_intersects_triangle(const glm::vec3 &rayOrigin, const glm::dvec3
 	edge2 = vertex2 - vertex0;
 	rayVecXe2 = glm::cross(rayVector, edge2);
 	det = static_cast<float>(glm::dot(edge1, rayVecXe2));
-	if (det > -EPSILON && det < EPSILON)
+	if (det < EPSILON)
 		return false; // This ray is parallel to this triangle.
 
 	invDet = 1.f / det;
@@ -62,7 +64,7 @@ static bool ray_intersects_triangle(const glm::vec3 &rayOrigin, const glm::dvec3
 		return false;
 }
 	
-void TransparencyMeshes::consume(meshTypes type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData)
+void TransparencyMeshes::consume(meshTypes type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData, const std::string &sphCoefFilePath)
 {
 	int indexCount = static_cast<int>(indexData.size());
 	int vertexCount = static_cast<int>(vertexData.size() / SINGLE_VERTEX_FLOAT_NUM);
@@ -71,95 +73,138 @@ void TransparencyMeshes::consume(meshTypes type, std::vector<float>& vertexData,
 	firstIndices.insert(std::make_pair(type, lastIndex));
 	indexCounts.insert(std::make_pair(type, indexCount));
 
-	std::vector<glm::dvec3> hammersleySequence = construct_hemisphere_hammersley_sequence(500);
-	std::vector<int> vertexNumbers(vertexCount);
-	int verticesProcessed = 0;
-  std::iota(vertexNumbers.begin(), vertexNumbers.end(), 0);
-	std::for_each(
-    std::execution::par,
-    vertexNumbers.begin(),
-    vertexNumbers.end(),
-    [&vertexData, &indexData, &hammersleySequence, vertexCount, indexCount, &verticesProcessed](auto&& vertexNo)
+	bool calculateSphCoefs = !std::filesystem::exists(sphCoefFilePath);
+	if (!calculateSphCoefs)
+	{
+		std::ifstream sphCoefFile;
+		std::string line;
+		std::vector<std::string> words;
+		int vertexNo = 0;
+
+		sphCoefFile.open(sphCoefFilePath);
+		while (std::getline(sphCoefFile, line))
 		{
-			glm::vec3 vertexPos = {vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_POSITION_START + 0],
-														vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_POSITION_START + 1],
-														vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_POSITION_START + 2]};
-			glm::vec3 inVertexNormal = {-vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_NORMAL_START + 0],
-																	-vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_NORMAL_START + 1],
-																	-vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_NORMAL_START + 2]};
-
-			// Constructing right-handed orthonormal basis
-			static constexpr glm::vec3 UP = glm::vec3(0.f, 1.f, 0.f);
-			glm::vec3 x_axis = (abs(glm::dot(UP, inVertexNormal)) == 1.f) ? glm::vec3(1.f, 0.f, 0.f) : glm::normalize(glm::cross(UP, inVertexNormal));
-			glm::vec3 y_axis = glm::normalize(cross(inVertexNormal, x_axis));
-			glm::mat3 transform = glm::mat3(x_axis, y_axis, inVertexNormal);
-
-			std::function<DataToEncode(glm::dvec3)> getDataToEncode = [vertexCount, &vertexData, &vertexPos, vertexNo, &transform, indexCount, &indexData](glm::dvec3 direction)
+			if (line.empty())
+				continue;
+				
+			words = split_line(line, " ");
+			if (words.size() != SH_COEEFS_NUM * SH_ENCODED_VALUES)
 			{
-				double width = 0;
-				double maxWidth = 0;
-				glm::vec3 refractedDirection = {0.f, 0.f, 0.f};
-				for (int triangleIndexNo = 0; triangleIndexNo + 2 < indexCount; triangleIndexNo += 3)
+				calculateSphCoefs = true;
+				break;
+			}
+			for (int i = 0; i < words.size(); i++)
+				vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + SH_COEFFS_START + i] = std::stof(words[i]);
+			vertexNo++;
+		}
+		sphCoefFile.close();
+	}
+
+	if (calculateSphCoefs)
+	{
+		std::vector<glm::dvec3> hammersleySequence = construct_hemisphere_hammersley_sequence(500);
+		std::vector<int> vertexNumbers(vertexCount);
+		int verticesProcessed = 0;
+		std::iota(vertexNumbers.begin(), vertexNumbers.end(), 0);
+		std::for_each(
+			std::execution::par,
+			vertexNumbers.begin(),
+			vertexNumbers.end(),
+			[&vertexData, &indexData, &hammersleySequence, vertexCount, indexCount, &verticesProcessed](auto&& vertexNo)
+			{
+				glm::vec3 vertexPos = {vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_POSITION_START + 0],
+															vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_POSITION_START + 1],
+															vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_POSITION_START + 2]};
+				glm::vec3 inVertexNormal = {-vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_NORMAL_START + 0],
+																		-vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_NORMAL_START + 1],
+																		-vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + VERTEX_NORMAL_START + 2]};
+
+				// Constructing right-handed orthonormal basis
+				static constexpr glm::vec3 UP = glm::vec3(0.f, 1.f, 0.f);
+				glm::vec3 x_axis = (abs(glm::dot(UP, inVertexNormal)) == 1.f) ? glm::vec3(1.f, 0.f, 0.f) : glm::normalize(glm::cross(UP, inVertexNormal));
+				glm::vec3 y_axis = glm::normalize(cross(inVertexNormal, x_axis));
+				glm::mat3 transform = glm::mat3(x_axis, y_axis, inVertexNormal);
+
+				std::function<DataToEncode(glm::dvec3)> getDataToEncode = [vertexCount, &vertexData, &vertexPos, vertexNo, &transform, indexCount, &indexData](glm::dvec3 direction)
 				{
-					glm::vec3 triangleVertex0 = {
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_POSITION_START + 0],  // x
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_POSITION_START + 1],  // y
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_POSITION_START + 2]}; // z
+					double width = 0;
+					double maxWidth = 0;
+					glm::vec3 refractedDirection = {0.f, 0.f, 0.f};
+					for (int triangleIndexNo = 0; triangleIndexNo + 2 < indexCount; triangleIndexNo += 3)
+					{
+						glm::vec3 triangleVertex0 = {
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_POSITION_START + 0],  // x
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_POSITION_START + 1],  // y
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_POSITION_START + 2]}; // z
 
-					glm::vec3 triangleVertex1 = {
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_POSITION_START + 0],
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_POSITION_START + 1],
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_POSITION_START + 2]};
+						glm::vec3 triangleVertex1 = {
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_POSITION_START + 0],
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_POSITION_START + 1],
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_POSITION_START + 2]};
 
-					glm::vec3 triangleVertex2 = {
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_POSITION_START + 0],
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_POSITION_START + 1],
-						vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_POSITION_START + 2]};
+						glm::vec3 triangleVertex2 = {
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_POSITION_START + 0],
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_POSITION_START + 1],
+							vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_POSITION_START + 2]};
 
-					// Here we go from vertex reference frame to object reference frame
-					glm::vec3 globalDirection = transform * direction;
-					if (ray_intersects_triangle(vertexPos, globalDirection,
-							triangleVertex0, triangleVertex1, triangleVertex2, width)) [[unlikely]]
-						if (width > maxWidth)
-						{
-							maxWidth = width;
+						// Here we go from vertex reference frame to object reference frame
+						glm::vec3 globalDirection = transform * direction;
+						if (ray_intersects_triangle(vertexPos, globalDirection,
+								triangleVertex0, triangleVertex1, triangleVertex2, width)) [[unlikely]]
+							if (width > maxWidth)
+							{
+								maxWidth = width;
 
-							glm::vec3 triangleNormal0 = {
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_NORMAL_START + 0],  // x
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_NORMAL_START + 1],  // y
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_NORMAL_START + 2]}; // z
+								glm::vec3 triangleNormal0 = {
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_NORMAL_START + 0],  // x
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_NORMAL_START + 1],  // y
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 0] + VERTEX_NORMAL_START + 2]}; // z
 
-							glm::vec3 triangleNormal1 = {
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_NORMAL_START + 0],
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_NORMAL_START + 1],
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_NORMAL_START + 2]};
+								glm::vec3 triangleNormal1 = {
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_NORMAL_START + 0],
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_NORMAL_START + 1],
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 1] + VERTEX_NORMAL_START + 2]};
 
-							glm::vec3 triangleNormal2 = {
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_NORMAL_START + 0],
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_NORMAL_START + 1],
-								vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_NORMAL_START + 2]};
+								glm::vec3 triangleNormal2 = {
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_NORMAL_START + 0],
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_NORMAL_START + 1],
+									vertexData[SINGLE_VERTEX_FLOAT_NUM * indexData[triangleIndexNo + 2] + VERTEX_NORMAL_START + 2]};
 
-							glm::vec3 triangleNormalAvg = glm::normalize((triangleNormal0 + triangleNormal1 + triangleNormal2) / 3.f);
+								glm::vec3 triangleNormalAvg = glm::normalize((triangleNormal0 + triangleNormal1 + triangleNormal2) / 3.f);
 
-							// Normal is directed inward, eta = IOR of glass since we go from glass to air
-							refractedDirection = glm::refract(globalDirection, -triangleNormalAvg, IOR);
-							if (glm::dot(refractedDirection, refractedDirection) > FLT_EPSILON)
-								refractedDirection = glm::normalize(refractedDirection);
-							else
-								refractedDirection = glm::vec3(0.f);
-						}
-				}
-				return DataToEncode(static_cast<float>(maxWidth), refractedDirection.x, refractedDirection.y, refractedDirection.z);
-			};
-			std::vector<float> sphCoeffs = calculate_sh_terms(hammersleySequence, getDataToEncode);
+								// Normal is directed inward, eta = IOR of glass since we go from glass to air
+								refractedDirection = glm::refract(globalDirection, -triangleNormalAvg, IOR);
+								if (glm::dot(refractedDirection, refractedDirection) > FLT_EPSILON)
+									refractedDirection = glm::normalize(refractedDirection);
+								else
+									refractedDirection = glm::vec3(0.f);
+							}
+					}
+					return DataToEncode(static_cast<float>(maxWidth), refractedDirection.x, refractedDirection.y, refractedDirection.z);
+				};
+				std::vector<float> sphCoeffs = calculate_sh_terms(hammersleySequence, getDataToEncode);
 
+				for (int i = 0; i < SH_COEEFS_NUM * SH_ENCODED_VALUES; i++)
+					vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + SH_COEFFS_START + i] = sphCoeffs[i];
+
+				verticesProcessed++;
+				if (verticesProcessed % 100 == 0)
+					std::cout << "Vertex: " << verticesProcessed << "/" << vertexCount << std::endl;
+		});
+
+		std::ofstream sphCoefFile(sphCoefFilePath);
+		for (int vertexNo = 0; vertexNo < vertexCount; vertexNo++)
+		{
 			for (int i = 0; i < SH_COEEFS_NUM * SH_ENCODED_VALUES; i++)
-				vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + SH_COEFFS_START + i] = sphCoeffs[i];
-
-			verticesProcessed++;
-			if (verticesProcessed % 100 == 0)
-				std::cout << "Vertex: " << verticesProcessed << "/" << vertexCount << std::endl;
-	});
+			{
+				sphCoefFile << vertexData[SINGLE_VERTEX_FLOAT_NUM * vertexNo + SH_COEFFS_START + i];
+				if (i < SH_COEEFS_NUM * SH_ENCODED_VALUES - 1)
+					sphCoefFile << ' ';
+			}
+			sphCoefFile << std::endl;
+		}
+		sphCoefFile.close();
+	}
 
 	for (float attribute : vertexData)
 		vertexLump.push_back(attribute);
