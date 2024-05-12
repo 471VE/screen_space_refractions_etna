@@ -6,6 +6,12 @@
 
 #include <glm/glm.hpp>
 
+enum ModelFillType
+{
+	SOLID,
+	HOLLOW
+};
+
 class ObjectMesh {
 public:
 	std::vector<float> vertices;
@@ -21,5 +27,5 @@ public:
 	void readCorner(const std::string &vertex_description);
 };
 
-std::string read_model_name(std::string modelNamePath);
+std::pair<std::string, ModelFillType> read_model_data(std::string modelNamePath);
 std::vector<std::string> split_line(std::string line, std::string delimiter);

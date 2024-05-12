@@ -572,7 +572,7 @@ void SimpleShadowmapRender::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, 
 void SimpleShadowmapRender::makeAssets()
 {
   std::string modelsPath = "resources/models/";
-  std::string modelName = read_model_name(modelsPath + "model_to_load.txt");
+  auto [modelName, modelType] = read_model_data(modelsPath + "model_to_load.txt");
 	std::unordered_map<meshTypes, std::string> model_filenames = {
 		{meshTypes::CUBE, modelsPath + modelName},
 	};
@@ -599,7 +599,7 @@ void SimpleShadowmapRender::makeAssets()
     m_context->getQueueFamilyIdx(), m_context->getQueueFamilyIdx());
 
   for (std::pair<meshTypes, ObjectMesh> pair : loaded_models)
-		transparencyMeshes->consume(pair.first, pair.second.vertices, pair.second.indices, model_filenames[pair.first] + ".sph");
+		transparencyMeshes->consume(pair.first, pair.second.vertices, pair.second.indices, model_filenames[pair.first] + ".sph", modelType);
 
 	transparencyMeshes->finalize();
 }

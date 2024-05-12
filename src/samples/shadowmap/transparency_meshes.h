@@ -9,7 +9,8 @@ class TransparencyMeshes {
 	public:
 		TransparencyMeshes(VkDevice a_device, VkPhysicalDevice a_physDevice, uint32_t a_transferQId, uint32_t a_graphicsQId);
 		~TransparencyMeshes();
-		void consume(meshTypes type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData, const std::string &sphCoefFilePath);
+		void consume(meshTypes type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData,
+			const std::string &sphCoefFilePath, ModelFillType fillType);
 		void finalize();
 
 		std::unordered_map<meshTypes, int> firstIndices;

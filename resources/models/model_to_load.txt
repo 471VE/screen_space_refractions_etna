@@ -1,1 +1,1 @@
-sphere_small
+bottle

@@ -1,6 +1,7 @@
 #include "object.h"
 #include "preprocessing_common.h"
 
+#include <array>
 #include <fstream>
 
 std::vector<std::string> split_line(std::string line, std::string delimiter)
@@ -141,14 +142,22 @@ void ObjectMesh::readCorner(const std::string& vertex_description)
 		vertices.push_back(0);
 }
 
-std::string read_model_name(std::string modelNamePath)
+std::pair<std::string, ModelFillType> read_model_data(std::string modelNamePath)
 {
 	std::ifstream file;
-	std::string modelName;
+	std::string line;
 
 	file.open(modelNamePath);
-	std::getline(file, modelName);
+	std::getline(file, line);
 	file.close();
 
-	return modelName;
+	std::vector<std::string> data = split_line(line, " ");
+	std::pair<std::string, ModelFillType> modelData;
+	modelData.first = data[0];
+	if( data.size() > 1 && data[1] == "hollow")
+		modelData.second = ModelFillType::HOLLOW;
+	else
+		modelData.second = ModelFillType::SOLID;
+
+	return modelData;
 }
